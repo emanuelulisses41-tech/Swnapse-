@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<title>S.Y.N.A.P.S.E — BREACH PROTOCOL</title>
+
+<!-- =========================
+     META / PWA BÁSICO
+========================= -->
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+
+<style>
+/* =========================================================
+   RESET + BASE
+========================================================= */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    font-family: Consolas, monospace;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+}
+
+/* =========================================================
+   VARIÁVEIS GLOBAIS
+========================================================= */
+:root {
+    --rotY: 0deg;
+    --power: 100;
+    --green: #00ff41;
+    --red: #ff0033;
+    --blue: #00eaff;
+}
+
+/* =========================================================
+   FX DE TELA (NÃO BLOQUEIAM TOQUE)
+========================================================= */
+#fx-scanlines {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    background:
+      linear-gradient(
+        rgba(255,255,255,0.03) 50%,
+        rgba(0,0,0,0.15) 50%
+      );
+    background-size: 100% 4px;
+}
+
+#fx-vignette {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9998;
+    background: radial-gradient(circle, transparent 30%, #000 130%);
+}
+
+/* =========================================================
+   TELAS (MENU / UI)
+========================================================= */
+.screen {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 20000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+#menu h1 {
+    font-size: 6vw;
+    color: #fff;
+    letter-spacing: 3px;
+    margin-bottom: 40px;
+}
+
+.btn {
+    width: 90%;
+    max-width: 420px;
+    padding: 22px;
+    margin: 10px;
+    background: #080808;
+    border: 2px solid #333;
+    color: #fff;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.btn:active {
+    transform: scale(0.97);
+}
+
+/* =========================================================
+   VIEWPORT 3D (OFFICE)
+========================================================= */
+#viewport {
+    position: fixed;
+    inset: 0;
+    display: none;
+    perspective: 1200px;
+    background: #000;
+}
+
+#office {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transform: translateZ(-350px) rotateY(var(--rotY));
+}
+
+/* =========================================================
+   FACES DA SALA
+========================================================= */
+.face {
+    position: absolute;
+    width: 200vw;
+    height: 200vh;
+    left: -50vw;
+    top: -50vh;
+    background: #111;
+    border: 20px solid #000;
+    box-shadow: inset 0 0 200px #000;
+}
+
+.floor {
+    transform: rotateX(90deg) translateZ(-50vh);
+    background: repeating-linear-gradient(
+        45deg,
+        #111 0px,
+        #111 40px,
+        #151515 40px,
+        #151515 80px
+    );
+}
+
+.ceiling {
+    transform: rotateX(-90deg) translateZ(-50vh);
+    background: #050505;
+}
+
+.front {
+    transform: translateZ(-900px);
+    background: linear-gradient(#0a0a2a, #000);
+}
+
+.left {
+    transform: rotateY(90deg) translateZ(-600px);
+    background: #090909;
+}
+
+.right {
+    transform: rotateY(-90deg) translateZ(-600px);
+    background: #090909;
+}
+
+/* =========================================================
+   PORTAS
+========================================================= */
+.door {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: -110%;
+    background: #020212;
+    border: 15px solid #000;
+    transition: 0.45s cubic-bezier(.2,.9,.2,1);
+}
+
+.door.closed {
+    top: 0;
+}
+
+/* =========================================================
+   PAINÉIS DE CONTROLE
+========================================================= */
+.panel {
+    position: absolute;
+    bottom: 18%;
+    width: 110px;
+    height: 240px;
+    background: #050505;
+    border: 4px solid #333;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 12px;
+}
+
+.panel.left { right: 80px; }
+.panel.right { left: 80px; }
+
+.panel button {
+    flex: 1;
+    font-weight: 900;
+    border: 3px solid #000;
+    background: #300;
+    color: #fff;
+}
+
+.panel button.light {
+    background: #330;
+}
+
+/* =========================================================
+   HUD
+========================================================= */
+#hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 8000;
+}
+
+#clock {
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    color: var(--blue);
+    font-size: 30px;
+    font-weight: bold;
+}
+
+#power {
+    position: absolute;
+    bottom: 110px;
+    left: 30px;
+    color: var(--green);
+    font-size: 20px;
+}
+
+/* =========================================================
+   TABLET / CÂMERAS
+========================================================= */
+#tablet-btn {
+    position: fixed;
+    bottom: 0;
+    left: 25%;
+    width: 50%;
+    height: 55px;
+    background: #000;
+    border: 3px solid var(--blue);
+    color: #fff;
+    font-weight: bold;
+    letter-spacing: 4px;
+    z-index: 15000;
+}
+
+#monitor {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 25000;
+    display: none;
+    flex-direction: row;
+}
+
+#cam-view {
+    flex: 2;
+    border: 15px solid #111;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#cam-map {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 20px;
+}
+
+/* =========================================================
+   JUMPSCARE
+========================================================= */
+#jumpscare {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 50000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+/* =========================================================
+   DEBUG (INTERNO)
+========================================================= */
+#debug {
+    display: none;
+}
+</style>
+</head>
+
+<body>
+
+<div id="fx-scanlines"></div>
+<div id="fx-vignette"></div>
+
+<!-- MENU -->
+<div id="menu" class="screen">
+    <h1>S.Y.N.A.P.S.E</h1>
+    <button class="btn" onclick="Game.start()">INICIAR</button>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+    <div id="clock">12 AM</div>
+    <div id="power">ENERGIA: <span id="pval">100</span>%</div>
+</div>
+
+<!-- VIEWPORT -->
+<div id="viewport">
+    <div id="office">
+        <div class="face floor"></div>
+        <div class="face ceiling"></div>
+        <div class="face front"></div>
+
+        <div class="face left">
+            <div id="doorL" class="door"></div>
+            <div class="panel left">
+                <button onclick="Game.toggleDoor('L')">PORTA</button>
+                <button class="light"
+                        ontouchstart="Game.light('L',true)"
+                        ontouchend="Game.light('L',false)">LUZ</button>
+            </div>
+        </div>
+
+        <div class="face right">
+            <div id="doorR" class="door"></div>
+            <div class="panel right">
+                <button onclick="Game.toggleDoor('R')">PORTA</button>
+                <button class="light"
+                        ontouchstart="Game.light('R',true)"
+                        ontouchend="Game.light('R',false)">LUZ</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<button id="tablet-btn" onclick="Game.toggleMonitor()">CAMERAS</button>
+
+<div id="monitor">
+    <div id="cam-view">SINAL</div>
+    <div id="cam-map">
+        <button onclick="Game.setCam('1A')">1A</button>
+        <button onclick="Game.setCam('1B')">1B</button>
+        <button onclick="Game.setCam('2A')">2A</button>
+        <button onclick="Game.setCam('OFFICE')">OFFICE</button>
+    </div>
+</div>
+
+<div id="jumpscare"></div>
+
+<!-- ======================================================
+     SCRIPT — PARTE 2 VEM DEPOIS
+====================================================== -->
+<script>
+/* O JS COMPLETO CONTINUA NA PARTE 2 */
+</script>
+
+</body>
+</html>
+<script>
+/* =========================================================
+   ENGINE PRINCIPAL — S.Y.N.A.P.S.E
+========================================================= */
+const Game = {
+
+    /* =========================
+       ESTADO GLOBAL
+    ========================= */
+    state: {
+        running: false,
+        hour: 0,
+        power: 100,
+        monitor: false,
+        cam: '1A',
+        doors: { L: false, R: false },
+        lights: { L: false, R: false },
+        paranoia: 0,
+        night: 1,
+        saveKey: 'SYNAPSE_SAVE'
+    },
+
+    /* =========================
+       ANIMATRÔNICOS
+    ========================= */
+    bots: [
+        { name: 'FREDBEAR', cam: '1A', ai: 8, side: 'R' },
+        { name: 'MARIONNE', cam: '1B', ai: 6, side: 'L' },
+        { name: 'SHADOW', cam: '2A', ai: 5, side: 'L' }
+    ],
+
+    /* =========================
+       START
+    ========================= */
+    start() {
+        document.getElementById('menu').style.display = 'none';
+        document.getElementById('viewport').style.display = 'block';
+        this.state.running = true;
+        this.load();
+        this.loop();
+        this.aiLoop();
+        this.clockLoop();
+    },
+
+    /* =========================
+       LOOP PRINCIPAL
+    ========================= */
+    loop() {
+        if (!this.state.running) return;
+
+        let usage = 1;
+        if (this.state.doors.L) usage++;
+        if (this.state.doors.R) usage++;
+        if (this.state.monitor) usage++;
+
+        this.state.power -= usage * 0.08;
+        if (this.state.power < 0) this.state.power = 0;
+
+        document.getElementById('pval').innerText =
+            Math.floor(this.state.power);
+
+        if (this.state.power <= 0) {
+            this.blackout();
+            return;
+        }
+
+        requestAnimationFrame(() => this.loop());
+    },
+
+    /* =========================
+       RELÓGIO / NOITE
+    ========================= */
+    clockLoop() {
+        setInterval(() => {
+            if (!this.state.running) return;
+            this.state.hour++;
+            document.getElementById('clock').innerText =
+                (this.state.hour === 0 ? 12 : this.state.hour) + ' AM';
+
+            if (this.state.hour >= 6) {
+                this.winNight();
+            }
+        }, 85000);
+    },
+
+    /* =========================
+       IA DOS ANIMATRÔNICOS
+    ========================= */
+    aiLoop() {
+        setInterval(() => {
+            if (!this.state.running) return;
+
+            this.bots.forEach(bot => {
+                if (Math.random() * 20 < bot.ai) {
+                    this.moveBot(bot);
+                }
+
+                if (bot.cam === 'OFFICE' && !this.state.monitor) {
+                    this.tryKill(bot);
+                }
+            });
+
+            if (this.state.monitor) {
+                this.renderCam();
+            }
+
+        }, 4970);
+    },
+
+    moveBot(bot) {
+        const path = ['1A','1B','2A','OFFICE'];
+        let i = path.indexOf(bot.cam);
+        if (i < path.length - 1) bot.cam = path[i + 1];
+    },
+
+    tryKill(bot) {
+        if (bot.side === 'L' && !this.state.doors.L) {
+            this.jumpscare(bot.name);
+        }
+        if (bot.side === 'R' && !this.state.doors.R) {
+            this.jumpscare(bot.name);
+        }
+    },
+
+    /* =========================
+       CÂMERAS
+    ========================= */
+    toggleMonitor() {
+        this.state.monitor = !this.state.monitor;
+        document.getElementById('monitor').style.display =
+            this.state.monitor ? 'flex' : 'none';
+        if (this.state.monitor) this.renderCam();
+    },
+
+    setCam(id) {
+        this.state.cam = id;
+        this.renderCam();
+    },
+
+    renderCam() {
+        const view = document.getElementById('cam-view');
+        view.innerHTML = '';
+
+        this.bots.forEach(bot => {
+            if (bot.cam === this.state.cam) {
+                view.innerHTML += `<div style="
+                    width:120px;
+                    height:200px;
+                    background:#000;
+                    border:3px solid #fff;
+                    color:#fff;
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    font-weight:bold;">
+                    ${bot.name}
+                </div>`;
+            }
+        });
+
+        if (view.innerHTML === '') {
+            view.innerHTML = '<span style="color:#555">EMPTY</span>';
+        }
+    },
+
+    /* =========================
+       PORTAS / LUZES
+    ========================= */
+    toggleDoor(side) {
+        this.state.doors[side] = !this.state.doors[side];
+        document.getElementById(
+            side === 'L' ? 'doorL' : 'doorR'
+        ).classList.toggle('closed');
+    },
+
+    light(side, on) {
+        this.state.lights[side] = on;
+        if (on) this.state.paranoia += 0.3;
+    },
+
+    /* =========================
+       JUMPSCARE (SEM PNG)
+    ========================= */
+    jumpscare(name) {
+        this.state.running = false;
+        const j = document.getElementById('jumpscare');
+        j.style.display = 'flex';
+        j.innerHTML = `
+            <div style="
+                width:100%;
+                height:100%;
+                background:black;
+                color:red;
+                font-size:60px;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                animation:flash 0.08s infinite;">
+                ${name}
+            </div>
+        `;
+        setTimeout(() => location.reload(), 2000);
+    },
+
+    blackout() {
+        this.state.running = false;
+        this.jumpscare('BLACKOUT');
+    },
+
+    /* =========================
+       SAVE / LOAD
+    ========================= */
+    save() {
+        localStorage.setItem(this.state.saveKey, JSON.stringify({
+            night: this.state.night
+        }));
+    },
+
+    load() {
+        const s = localStorage.getItem(this.state.saveKey);
+        if (s) {
+            this.state.night = JSON.parse(s).night;
+        }
+    },
+
+    winNight() {
+        this.state.running = false;
+        this.state.night++;
+        this.save();
+        alert('NOITE COMPLETA');
+        location.reload();
+    }
+};
+
+/* =========================================================
+   ANIMAÇÕES
+========================================================= */
+const style = document.createElement('style');
+style.innerHTML = `
+@keyframes flash {
+    0% { opacity:1 }
+    50% { opacity:0 }
+    100% { opacity:1 }
+}
+`;
+document.head.appendChild(style);
+</script>

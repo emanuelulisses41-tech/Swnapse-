@@ -1,0 +1,13 @@
+{
+  "name": "S.Y.N.A.P.S.E – Breach Protocol",
+  "short_name": "SYNAPSE",
+  "start_url": "index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#0b0f14",
+  "icons": [
+    { "src": "icons/icon-447.png", "sizes": "447x447", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
