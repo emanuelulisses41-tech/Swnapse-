@@ -1,230 +1,228 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>SYNAPSE</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>Five Nights — Neural Breach</title>
 
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#000000">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:monospace}
+html,body{width:100%;height:100%;background:#000;color:#0f0;overflow:hidden}
 
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      user-select: none;
-      font-family: Arial, sans-serif;
-    }
+#game{position:relative;width:100vw;height:100vh;background:radial-gradient(#050505,#000)}
 
-    body {
-      background: black;
-      color: white;
-      overflow: hidden;
-    }
+.layer{position:absolute;width:110%;height:110%;top:-5%;left:-5%;pointer-events:none}
+#bg{background:#020202}
+#mid{background:rgba(255,255,255,.01)}
+#front{}
 
-    #game {
-      width: 100vw;
-      height: 100vh;
-      position: relative;
-      background: radial-gradient(circle at center, #111, #000);
-    }
+#hud{
+position:absolute;bottom:0;width:100%;height:70px;
+display:none;justify-content:space-between;align-items:center;
+padding:10px 20px;background:linear-gradient(to top,#000,transparent);
+z-index:10
+}
 
-    #office {
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(#111, #000);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      padding: 10px;
-    }
+#menu{
+position:absolute;inset:0;background:#000;color:#aaa;
+display:flex;flex-direction:column;justify-content:center;align-items:center;
+z-index:20
+}
 
-    #topHUD {
-      display: flex;
-      justify-content: space-between;
-      font-size: 14px;
-    }
+.btn{border:1px solid #333;padding:10px 40px;margin:10px;cursor:pointer}
+.btn.lock{opacity:.3;pointer-events:none}
 
-    #power {
-      color: #0f0;
-    }
+#camera{position:absolute;inset:0;background:#000;display:none;z-index:5}
 
-    #time {
-      color: #ccc;
-    }
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:99}
 
-    #doors {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 20px;
-    }
-
-    .doorBtn {
-      width: 45%;
-      height: 60px;
-      background: #222;
-      border: 2px solid #555;
-      color: white;
-      font-size: 16px;
-    }
-
-    .doorBtn.active {
-      background: darkred;
-    }
-
-    #cameraBtn {
-      margin-top: 10px;
-      height: 50px;
-      background: #333;
-      border: 2px solid #666;
-      color: white;
-    }
-
-    #cameraView {
-      position: absolute;
-      inset: 0;
-      background: black;
-      display: none;
-      flex-direction: column;
-      padding: 10px;
-    }
-
-    #cameraLabel {
-      font-size: 18px;
-      margin-bottom: 10px;
-    }
-
-    .cam {
-      flex: 1;
-      border: 1px solid #444;
-      margin-bottom: 5px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      color: #777;
-    }
-
-    #closeCam {
-      height: 50px;
-      background: darkred;
-      border: none;
-      color: white;
-      margin-top: 5px;
-    }
-
-    #jumpscare {
-      position: absolute;
-      inset: 0;
-      background: black;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      font-size: 40px;
-      color: red;
-      z-index: 10;
-    }
-  </style>
+canvas{position:absolute;inset:0}
+</style>
 </head>
 
 <body>
-  <div id="game">
+<div id="game">
 
-    <div id="office">
-      <div id="topHUD">
-        <div id="time">12 AM</div>
-        <div id="power">Energia: 100%</div>
-      </div>
+<div id="bg" class="layer"></div>
+<div id="mid" class="layer"></div>
+<div id="front" class="layer"></div>
 
-      <div id="doors">
-        <button id="leftDoor" class="doorBtn">Porta Esquerda</button>
-        <button id="rightDoor" class="doorBtn">Porta Direita</button>
-      </div>
+<canvas id="screen"></canvas>
+<div id="camera"></div>
 
-      <button id="cameraBtn">📷 CÂMERAS</button>
-    </div>
+<div id="hud">
+<div id="time">12:00 AM</div>
+<div id="power">Power: 100%</div>
+</div>
 
-    <div id="cameraView">
-      <div id="cameraLabel">Câmeras</div>
-      <div class="cam">CAM 1</div>
-      <div class="cam">CAM 2</div>
-      <div class="cam">CAM 3</div>
-      <button id="closeCam">Fechar</button>
-    </div>
+<div id="flash"></div>
+<div id="menu"></div>
 
-    <div id="jumpscare">JUMPSCARE</div>
+</div>
 
-  </div>
+<script>
+/* ================= ENGINE ================= */
+const canvas=document.getElementById("screen");
+const ctx=canvas.getContext("2d");
+function resize(){canvas.width=innerWidth;canvas.height=innerHeight}
+addEventListener("resize",resize);resize();
 
-  <script>
-    // SERVICE WORKER
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js');
-      });
-    }
+/* ================= STATE ================= */
+const GAME={
+night:1,hour:0,power:100,running:false,difficulty:1,camera:false
+};
 
-    let power = 100;
-    let time = 0;
-    let leftClosed = false;
-    let rightClosed = false;
-    let animatronic = 0;
+/* ================= SAVE ================= */
+let SAVE=JSON.parse(localStorage.getItem("NB_SAVE"))||{unlocked:1,last:1};
 
-    const powerEl = document.getElementById("power");
-    const timeEl = document.getElementById("time");
-    const leftDoor = document.getElementById("leftDoor");
-    const rightDoor = document.getElementById("rightDoor");
-    const cameraBtn = document.getElementById("cameraBtn");
-    const camView = document.getElementById("cameraView");
-    const closeCam = document.getElementById("closeCam");
-    const jumpscare = document.getElementById("jumpscare");
+/* ================= MENU ================= */
+const menu=document.getElementById("menu");
+function renderMenu(){
+menu.innerHTML=`
+<h1 style="letter-spacing:4px;margin-bottom:30px">NEURAL BREACH</h1>
+<div class="btn" onclick="startNight(1)">NEW GAME</div>
+<div class="btn" onclick="startNight(SAVE.last)">CONTINUE</div>
+<div class="btn ${SAVE.unlocked<7?'lock':''}">CUSTOM NIGHT</div>
+<p style="opacity:.4;font-size:12px;margin-top:40px">© Fazbear Protocol</p>
+`;
+}
+renderMenu();
 
-    leftDoor.onclick = () => {
-      leftClosed = !leftClosed;
-      leftDoor.classList.toggle("active");
-    };
+/* ================= START ================= */
+function startNight(n){
+menu.style.display="none";
+document.getElementById("hud").style.display="flex";
+GAME.night=n;GAME.hour=0;GAME.power=100;
+GAME.running=true;GAME.difficulty=n;
+}
 
-    rightDoor.onclick = () => {
-      rightClosed = !rightClosed;
-      rightDoor.classList.toggle("active");
-    };
+/* ================= POWER ================= */
+setInterval(()=>{
+if(!GAME.running)return;
+GAME.power-=0.15+GAME.difficulty*.05;
+if(GAME.power<0)GAME.power=0;
+power.innerText="Power: "+Math.floor(GAME.power)+"%";
+},1000);
 
-    cameraBtn.onclick = () => {
-      camView.style.display = "flex";
-    };
+/* ================= CAMERA ================= */
+addEventListener("keydown",e=>{
+if(e.key==="c"&&GAME.running){
+GAME.camera=!GAME.camera;
+camera.style.display=GAME.camera?"block":"none";
+GAME.power-=1;
+}
+});
 
-    closeCam.onclick = () => {
-      camView.style.display = "none";
-    };
+/* ================= CAMERAS ================= */
+const CAMERAS=[
+{id:0,name:"Palco"},
+{id:1,name:"Corredor Oeste"},
+{id:2,name:"Corredor Leste"},
+{id:3,name:"Cozinha"},
+{id:4,name:"Sala Peças"},
+{id:5,name:"Escritório"}
+];
+let currentCam=0;
 
-    function gameLoop() {
-      power -= (leftClosed ? 0.08 : 0) + (rightClosed ? 0.08 : 0) + (camView.style.display === "flex" ? 0.1 : 0);
-      if (power <= 0) {
-        power = 0;
-        jumpscare.style.display = "flex";
-      }
-      powerEl.textContent = "Energia: " + Math.floor(power) + "%";
-    }
+/* ================= ANIMATRONICS ================= */
+const animatronics=[
+{name:"Freddy",route:[0,1,5],pos:0,agro:1,pat:5},
+{name:"Bonnie",route:[0,2,5],pos:0,agro:1.2,pat:4},
+{name:"Chica",route:[0,3,2,5],pos:0,agro:1.1,pat:4},
+{name:"Spring",route:[4,1,5],pos:0,agro:1.5,pat:3}
+];
 
-    function clockLoop() {
-      time++;
-      timeEl.textContent = (12 + time) + " AM";
-    }
+/* ================= IA ================= */
+setInterval(()=>{
+if(!GAME.running)return;
+animatronics.forEach(a=>{
+let seen=GAME.camera && CAMERAS[a.route[a.pos]].id===currentCam;
+if(seen){a.pat--;a.agro+=0.05}
+let chance=Math.random()*(a.agro+GAME.difficulty*.4);
+if(chance>1 && (!seen||a.pat<=0)){
+a.pos++;a.pat=5;
+}
+if(a.pos>=a.route.length)triggerJumpscare(a.name);
+});
+},3000);
 
-    function animatronicAI() {
-      animatronic++;
-      if (animatronic > 5 && (!leftClosed || !rightClosed)) {
-        jumpscare.style.display = "flex";
-      }
-    }
+/* ================= HORROR ================= */
+setInterval(()=>{
+if(!GAME.running)return;
+if(Math.random()<0.1*GAME.night){
+document.body.style.filter="brightness(70%)";
+setTimeout(()=>document.body.style.filter="none",200);
+}
+},5000);
 
-    setInterval(gameLoop, 500);
-    setInterval(clockLoop, 10000);
-    setInterval(animatronicAI, 4000);
-  </script>
+/* ================= JUMPSCARE ================= */
+function triggerJumpscare(name){
+GAME.running=false;
+flash.style.opacity=1;
+setTimeout(()=>{
+flash.style.opacity=0;
+alert("VOCÊ FOI PEGO POR "+name.toUpperCase());
+menu.style.display="flex";renderMenu();
+},150);
+}
+
+/* ================= CLOCK + FINAL ================= */
+setInterval(()=>{
+if(!GAME.running)return;
+GAME.hour++;
+time.innerText=(GAME.hour===0?"12":GAME.hour)+":00 AM";
+
+if(GAME.hour>=6){
+GAME.running=false;
+
+if(GAME.night>=7){
+triggerSecretEnding();return;
+}
+
+SAVE.last=GAME.night+1;
+SAVE.unlocked=Math.max(SAVE.unlocked,SAVE.last);
+localStorage.setItem("NB_SAVE",JSON.stringify(SAVE));
+menu.style.display="flex";renderMenu();
+}
+},45000);
+
+/* ================= FINAL SECRETO ================= */
+function triggerSecretEnding(){
+hud.style.display="none";
+const end=document.createElement("div");
+end.style.cssText=`
+position:fixed;inset:0;background:#000;color:#0f0;
+display:flex;flex-direction:column;justify-content:center;
+align-items:center;text-align:center;z-index:9999`;
+end.innerHTML=`
+<p>NEURAL BREACH LOG</p><br>
+<p>Você não estava jogando.</p>
+<p>A IA estava aprendendo.</p><br>
+<p>Não existe saída.</p><br>
+<p>FINAL VERDADEIRO</p>`;
+document.body.appendChild(end);
+}
+
+/* ================= LOOP ================= */
+let mx=0,my=0;
+addEventListener("mousemove",e=>{
+mx=(e.clientX/innerWidth-.5)*10;
+my=(e.clientY/innerHeight-.5)*10;
+});
+
+function loop(){
+ctx.clearRect(0,0,canvas.width,canvas.height);
+for(let i=0;i<40;i++){
+ctx.fillStyle=`rgba(255,255,255,${Math.random()*0.02})`;
+ctx.fillRect(Math.random()*canvas.width,Math.random()*canvas.height,2,2);
+}
+bg.style.transform=`translate(${mx*.3}px,${my*.3}px)`;
+mid.style.transform=`translate(${mx*.6}px,${my*.6}px)`;
+front.style.transform=`translate(${mx}px,${my}px)`;
+requestAnimationFrame(loop);
+}
+loop();
+</script>
 </body>
-          </html>
+</html>
