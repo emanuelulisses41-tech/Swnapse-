@@ -2,179 +2,226 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Nightmare Build</title>
-
-<!-- MANIFEST -->
-<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Five Nights — Neural Breach</title>
 
 <style>
-* { margin:0; padding:0; box-sizing:border-box; font-family:Arial }
-body { background:#000; color:#0f0; overflow:hidden }
-canvas { display:block; background:#000 }
-#menu, #final {
-  position:fixed; inset:0; display:flex;
-  flex-direction:column; justify-content:center; align-items:center;
-  background:#000; z-index:10
+*{margin:0;padding:0;box-sizing:border-box;font-family:monospace}
+html,body{width:100%;height:100%;background:#000;color:#0f0;overflow:hidden}
+
+#game{position:relative;width:100vw;height:100vh;background:radial-gradient(#060606,#000)}
+.layer{position:absolute;width:110%;height:110%;top:-5%;left:-5%}
+#mid{background:rgba(255,255,255,.04)}
+
+canvas{position:absolute;inset:0}
+
+#hud{
+  position:absolute;bottom:0;width:100%;height:60px;
+  display:none;justify-content:space-between;align-items:center;
+  padding:10px 20px;
+  background:linear-gradient(to top,#000,transparent);
+  z-index:10
 }
-button {
-  padding:15px 30px; margin:10px;
-  background:#111; color:#0f0; border:2px solid #0f0;
-  font-size:18px;
+
+#menu,#custom{
+  position:absolute;inset:0;
+  background:#000;color:#aaa;
+  display:flex;flex-direction:column;
+  justify-content:center;align-items:center;
+  z-index:20
 }
-#hud {
-  position:fixed; bottom:10px; left:10px;
-  font-size:14px; color:#0f0
+
+#custom{display:none}
+
+.btn{border:1px solid #333;padding:10px 40px;margin:10px;cursor:pointer}
+
+#cameraView{
+  position:absolute;inset:0;
+  background:#000;
+  display:none;
+  z-index:5
+}
+
+#map{
+  position:absolute;right:10px;top:10px;
+  border:1px solid #0f0;padding:8px;font-size:12px
+}
+
+.camBtn{border:1px solid #0f0;padding:4px;margin:4px;cursor:pointer}
+
+#flash{
+  position:absolute;inset:0;background:#fff;
+  opacity:0;pointer-events:none;z-index:99
 }
 </style>
 </head>
 
 <body>
+<div id="game">
+  <div class="layer"></div>
+  <div id="mid" class="layer"></div>
 
-<!-- MENU -->
-<div id="menu">
-  <h1>Nightmare Build</h1>
-  <button onclick="startGame()">INICIAR</button>
+  <canvas id="screen"></canvas>
+
+  <div id="cameraView">
+    <div id="map">
+      <div class="camBtn" onclick="setCam(0)">CAM 1</div>
+      <div class="camBtn" onclick="setCam(1)">CAM 2</div>
+      <div class="camBtn" onclick="setCam(2)">CAM 3</div>
+      <div class="camBtn" onclick="setCam(3)">CAM 4</div>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div id="time">12:00 AM</div>
+    <div id="power">Power: 100%</div>
+  </div>
+
+  <div id="menu"></div>
+  <div id="custom"></div>
+  <div id="flash"></div>
 </div>
-
-<!-- FINAL SECRETO -->
-<div id="final" style="display:none">
-  <h1>FINAL SECRETO</h1>
-  <p>Você descobriu a verdade.</p>
-  <button onclick="resetGame()">REINICIAR</button>
-</div>
-
-<canvas id="game"></canvas>
-<div id="hud"></div>
 
 <script>
-/* =====================================================
-   A — ENGINE + LOOP + RENDER
-===================================================== */
+/* ================= LORE + SAVE ================= */
+const PROGRESS={nightUnlocked:1,deaths:0,trueEnding:false}
+const AI_MEMORY={camUse:0}
+const SECRET={flag:false}
 
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-resize();
-window.addEventListener("resize", resize);
+function save(){localStorage.setItem("NB",JSON.stringify({PROGRESS,AI_MEMORY,SECRET}))}
+function load(){
+  const s=localStorage.getItem("NB"); if(!s)return;
+  Object.assign(PROGRESS,JSON.parse(s).PROGRESS)
+  Object.assign(AI_MEMORY,JSON.parse(s).AI_MEMORY)
+  Object.assign(SECRET,JSON.parse(s).SECRET)
+}
+load();
 
-function resize(){
-  canvas.width = innerWidth;
-  canvas.height = innerHeight;
+/* ================= ENGINE ================= */
+const canvas=screen,ctx=canvas.getContext("2d");
+function resize(){canvas.width=innerWidth;canvas.height=innerHeight}
+addEventListener("resize",resize);resize();
+
+const GAME={night:1,hour:0,power:100,run:false,cam:false,camID:0}
+
+const menu=document.getElementById("menu");
+const custom=document.getElementById("custom");
+
+menu.innerHTML=`
+<h1>NEURAL BREACH</h1>
+<div class="btn" onclick="start(1)">NOVO JOGO</div>
+<div class="btn" onclick="start(PROGRESS.nightUnlocked)">CONTINUAR</div>
+<div class="btn" onclick="openCustom()">CUSTOM NIGHT</div>
+`;
+
+function openCustom(){
+  custom.style.display="flex";
+  custom.innerHTML=`
+  <h2>CUSTOM NIGHT</h2>
+  <div class="btn" onclick="start(8)">NIGHT 8</div>
+  <div class="btn" onclick="back()">VOLTAR</div>`;
+}
+function back(){custom.style.display="none";menu.style.display="flex"}
+
+function start(n){
+  GAME.night=n;GAME.hour=0;GAME.power=100;GAME.run=true;
+  anim.forEach(a=>a.p=0);
+  menu.style.display="none";custom.style.display="none";
+  hud.style.display="flex";
 }
 
-let running = false;
+/* ================= TEMPO / ENERGIA ================= */
+setInterval(()=>{
+  if(!GAME.run)return;
+  GAME.hour++;
+  time.innerText=(GAME.hour===0?"12":GAME.hour)+":00 AM";
+  if(GAME.hour>=6) win();
+},45000);
 
-/* =====================================================
-   B — SISTEMA DO JOGO
-===================================================== */
+setInterval(()=>{
+  if(!GAME.run)return;
+  GAME.power-=0.15+GAME.night*0.1;
+  power.innerText="Power: "+Math.floor(GAME.power)+"%";
+  if(GAME.power<=0) lose("ENERGIA ACABOU");
+},1000);
 
-let GAME = {
-  night: 1,
-  power: 100,
-  time: 0,
-  camera: 0,
-  animatronicX: 0,
-  gameOver: false
-};
+/* ================= IA ================= */
+const anim=[
+  {n:"Freddy",p:0},
+  {n:"Bonnie",p:0},
+  {n:"Chica",p:0},
+  {n:"Spring",p:0}
+];
 
-let SAVE = JSON.parse(localStorage.getItem("NB_SAVE")) || {
-  night: 1,
-  secretEnding: false
-};
-
-function startGame(){
-  document.getElementById("menu").style.display = "none";
-  running = true;
-  GAME.night = SAVE.night;
-  loop();
+function ai(){
+  let ag=0.25+(GAME.night*0.08);
+  if(AI_MEMORY.camUse>12) ag+=0.15;
+  return Math.random()<ag;
 }
 
+setInterval(()=>{
+  if(!GAME.run)return;
+  anim.forEach(a=>{
+    if(ai())a.p++;
+    if(a.p>=4) lose(a.n);
+  });
+  if(Math.random()<0.08) glitch();
+},3000);
+
+/* ================= CÂMERAS ================= */
+addEventListener("keydown",e=>{
+  if(e.key==="c"&&GAME.run){
+    GAME.cam=!GAME.cam;
+    cameraView.style.display=GAME.cam?"block":"none";
+    GAME.power--; AI_MEMORY.camUse++;
+  }
+});
+function setCam(i){
+  GAME.camID=i;
+  if(Math.random()<0.2) flashFX();
+}
+
+/* ================= FINAIS ================= */
+function win(){
+  GAME.run=false;
+  if(GAME.night>=PROGRESS.nightUnlocked)
+    PROGRESS.nightUnlocked=Math.min(8,GAME.night+1);
+  if(GAME.night===8 && PROGRESS.deaths===0){
+    SECRET.flag=true; PROGRESS.trueEnding=true;
+    alert("FINAL SECRETO DESBLOQUEADO");
+  }
+  save(); reset();
+}
+function lose(who){
+  GAME.run=false; PROGRESS.deaths++;
+  flashFX(); alert("VOCÊ FOI PEGO POR "+who);
+  save(); reset();
+}
+function reset(){
+  hud.style.display="none";
+  menu.style.display="flex";
+}
+
+/* ================= FX ================= */
+function flashFX(){
+  flash.style.opacity=1;
+  setTimeout(()=>flash.style.opacity=0,120);
+}
+function glitch(){
+  ctx.fillStyle="rgba(255,255,255,.2)";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+}
+
+/* ================= LOOP ================= */
 function loop(){
-  if(!running) return;
-  update();
-  render();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(let i=0;i<35;i++){
+    ctx.fillStyle=`rgba(255,255,255,${Math.random()*0.03})`;
+    ctx.fillRect(Math.random()*canvas.width,Math.random()*canvas.height,2,2);
+  }
   requestAnimationFrame(loop);
 }
-
-function update(){
-  GAME.time += 0.01;
-  GAME.power -= 0.005;
-
-  // IA animatrônico simples
-  if(Math.random() < 0.01){
-    GAME.animatronicX += 50;
-  }
-
-  if(GAME.animatronicX > canvas.width - 100){
-    GAME.gameOver = true;
-    running = false;
-    document.getElementById("menu").style.display = "flex";
-  }
-
-  // Fim da noite
-  if(GAME.time >= 6){
-    nextNight();
-  }
-}
-
-function render(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  // escritório
-  ctx.fillStyle = "#111";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // animatrônico
-  ctx.fillStyle = "red";
-  ctx.fillRect(GAME.animatronicX, canvas.height/2, 50, 100);
-
-  document.getElementById("hud").innerHTML =
-    `Noite: ${GAME.night}<br>` +
-    `Energia: ${Math.floor(GAME.power)}%<br>` +
-    `Hora: ${GAME.time.toFixed(2)} AM`;
-}
-
-function nextNight(){
-  GAME.time = 0;
-  GAME.animatronicX = 0;
-  GAME.night++;
-  SAVE.night = GAME.night;
-  localStorage.setItem("NB_SAVE", JSON.stringify(SAVE));
-
-  // 👉 CHAMA PARTE C
-  checkSecretEnding();
-}
-
-/* =====================================================
-   C — FINAL SECRETO + LORE
-===================================================== */
-
-function checkSecretEnding(){
-  if(GAME.night > 5 && !SAVE.secretEnding){
-    SAVE.secretEnding = true;
-    localStorage.setItem("NB_SAVE", JSON.stringify(SAVE));
-    triggerSecretEnding();
-  }
-}
-
-function triggerSecretEnding(){
-  running = false;
-  document.getElementById("final").style.display = "flex";
-}
-
-function resetGame(){
-  localStorage.clear();
-  location.reload();
-}
-
-/* =====================================================
-   SERVICE WORKER
-===================================================== */
-
-if("serviceWorker" in navigator){
-  navigator.serviceWorker.register("sw.js");
-}
+loop();
 </script>
-
 </body>
 </html>
