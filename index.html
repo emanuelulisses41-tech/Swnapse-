@@ -2,227 +2,179 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#000000">
-<title>Five Nights — Neural Breach</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nightmare Build</title>
+
+<!-- MANIFEST -->
+<link rel="manifest" href="manifest.json">
 
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:monospace}
-html,body{width:100%;height:100%;background:#000;color:#0f0;overflow:hidden}
-
-#game{position:relative;width:100vw;height:100vh;background:radial-gradient(#050505,#000)}
-
-.layer{position:absolute;width:110%;height:110%;top:-5%;left:-5%;pointer-events:none}
-#bg{background:#020202}
-#mid{background:rgba(255,255,255,.01)}
-#front{}
-
-#hud{
-position:absolute;bottom:0;width:100%;height:70px;
-display:none;justify-content:space-between;align-items:center;
-padding:10px 20px;background:linear-gradient(to top,#000,transparent);
-z-index:10
+* { margin:0; padding:0; box-sizing:border-box; font-family:Arial }
+body { background:#000; color:#0f0; overflow:hidden }
+canvas { display:block; background:#000 }
+#menu, #final {
+  position:fixed; inset:0; display:flex;
+  flex-direction:column; justify-content:center; align-items:center;
+  background:#000; z-index:10
 }
-
-#menu{
-position:absolute;inset:0;background:#000;color:#aaa;
-display:flex;flex-direction:column;justify-content:center;align-items:center;
-z-index:20
+button {
+  padding:15px 30px; margin:10px;
+  background:#111; color:#0f0; border:2px solid #0f0;
+  font-size:18px;
 }
-
-.btn{border:1px solid #333;padding:10px 40px;margin:10px;cursor:pointer}
-.btn.lock{opacity:.3;pointer-events:none}
-
-#camera{position:absolute;inset:0;background:#000;display:none;z-index:5}
-
-#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:99}
-
-canvas{position:absolute;inset:0}
+#hud {
+  position:fixed; bottom:10px; left:10px;
+  font-size:14px; color:#0f0
+}
 </style>
 </head>
 
 <body>
-<div id="game">
 
-<div id="bg" class="layer"></div>
-<div id="mid" class="layer"></div>
-<div id="front" class="layer"></div>
-
-<canvas id="screen"></canvas>
-<div id="camera"></div>
-
-<div id="hud">
-<div id="time">12:00 AM</div>
-<div id="power">Power: 100%</div>
+<!-- MENU -->
+<div id="menu">
+  <h1>Nightmare Build</h1>
+  <button onclick="startGame()">INICIAR</button>
 </div>
 
-<div id="flash"></div>
-<div id="menu"></div>
-
+<!-- FINAL SECRETO -->
+<div id="final" style="display:none">
+  <h1>FINAL SECRETO</h1>
+  <p>Você descobriu a verdade.</p>
+  <button onclick="resetGame()">REINICIAR</button>
 </div>
+
+<canvas id="game"></canvas>
+<div id="hud"></div>
 
 <script>
-/* ================= ENGINE ================= */
-const canvas=document.getElementById("screen");
-const ctx=canvas.getContext("2d");
-function resize(){canvas.width=innerWidth;canvas.height=innerHeight}
-addEventListener("resize",resize);resize();
+/* =====================================================
+   A — ENGINE + LOOP + RENDER
+===================================================== */
 
-/* ================= STATE ================= */
-const GAME={
-night:1,hour:0,power:100,running:false,difficulty:1,camera:false
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+resize();
+window.addEventListener("resize", resize);
+
+function resize(){
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+}
+
+let running = false;
+
+/* =====================================================
+   B — SISTEMA DO JOGO
+===================================================== */
+
+let GAME = {
+  night: 1,
+  power: 100,
+  time: 0,
+  camera: 0,
+  animatronicX: 0,
+  gameOver: false
 };
 
-/* ================= SAVE ================= */
-let SAVE=JSON.parse(localStorage.getItem("NB_SAVE"))||{unlocked:1,last:1};
+let SAVE = JSON.parse(localStorage.getItem("NB_SAVE")) || {
+  night: 1,
+  secretEnding: false
+};
 
-/* ================= MENU ================= */
-const menu=document.getElementById("menu");
-function renderMenu(){
-menu.innerHTML=`
-<h1 style="letter-spacing:4px;margin-bottom:30px">NEURAL BREACH</h1>
-<div class="btn" onclick="startNight(1)">NEW GAME</div>
-<div class="btn" onclick="startNight(SAVE.last)">CONTINUE</div>
-<div class="btn ${SAVE.unlocked<7?'lock':''}">CUSTOM NIGHT</div>
-<p style="opacity:.4;font-size:12px;margin-top:40px">© Fazbear Protocol</p>
-`;
+function startGame(){
+  document.getElementById("menu").style.display = "none";
+  running = true;
+  GAME.night = SAVE.night;
+  loop();
 }
-renderMenu();
-
-/* ================= START ================= */
-function startNight(n){
-menu.style.display="none";
-document.getElementById("hud").style.display="flex";
-GAME.night=n;GAME.hour=0;GAME.power=100;
-GAME.running=true;GAME.difficulty=n;
-}
-
-/* ================= POWER ================= */
-setInterval(()=>{
-if(!GAME.running)return;
-GAME.power-=0.15+GAME.difficulty*.05;
-if(GAME.power<0)GAME.power=0;
-power.innerText="Power: "+Math.floor(GAME.power)+"%";
-},1000);
-
-/* ================= CAMERA ================= */
-addEventListener("keydown",e=>{
-if(e.key==="c"&&GAME.running){
-GAME.camera=!GAME.camera;
-camera.style.display=GAME.camera?"block":"none";
-GAME.power-=1;
-}
-});
-
-/* ================= CAMERAS ================= */
-const CAMERAS=[
-{id:0,name:"Palco"},
-{id:1,name:"Corredor Oeste"},
-{id:2,name:"Corredor Leste"},
-{id:3,name:"Cozinha"},
-{id:4,name:"Sala Peças"},
-{id:5,name:"Escritório"}
-];
-let currentCam=0;
-
-/* ================= ANIMATRONICS ================= */
-const animatronics=[
-{name:"Freddy",route:[0,1,5],pos:0,agro:1,pat:5},
-{name:"Bonnie",route:[0,2,5],pos:0,agro:1.2,pat:4},
-{name:"Chica",route:[0,3,2,5],pos:0,agro:1.1,pat:4},
-{name:"Spring",route:[4,1,5],pos:0,agro:1.5,pat:3}
-];
-
-/* ================= IA ================= */
-setInterval(()=>{
-if(!GAME.running)return;
-animatronics.forEach(a=>{
-let seen=GAME.camera && CAMERAS[a.route[a.pos]].id===currentCam;
-if(seen){a.pat--;a.agro+=0.05}
-let chance=Math.random()*(a.agro+GAME.difficulty*.4);
-if(chance>1 && (!seen||a.pat<=0)){
-a.pos++;a.pat=5;
-}
-if(a.pos>=a.route.length)triggerJumpscare(a.name);
-});
-},3000);
-
-/* ================= HORROR ================= */
-setInterval(()=>{
-if(!GAME.running)return;
-if(Math.random()<0.1*GAME.night){
-document.body.style.filter="brightness(70%)";
-setTimeout(()=>document.body.style.filter="none",200);
-}
-},5000);
-
-/* ================= JUMPSCARE ================= */
-function triggerJumpscare(name){
-GAME.running=false;
-flash.style.opacity=1;
-setTimeout(()=>{
-flash.style.opacity=0;
-alert("VOCÊ FOI PEGO POR "+name.toUpperCase());
-menu.style.display="flex";renderMenu();
-},150);
-}
-
-/* ================= CLOCK + FINAL ================= */
-setInterval(()=>{
-if(!GAME.running)return;
-GAME.hour++;
-time.innerText=(GAME.hour===0?"12":GAME.hour)+":00 AM";
-
-if(GAME.hour>=6){
-GAME.running=false;
-
-if(GAME.night>=7){
-triggerSecretEnding();return;
-}
-
-SAVE.last=GAME.night+1;
-SAVE.unlocked=Math.max(SAVE.unlocked,SAVE.last);
-localStorage.setItem("NB_SAVE",JSON.stringify(SAVE));
-menu.style.display="flex";renderMenu();
-}
-},45000);
-
-/* ================= FINAL SECRETO ================= */
-function triggerSecretEnding(){
-hud.style.display="none";
-const end=document.createElement("div");
-end.style.cssText=`
-position:fixed;inset:0;background:#000;color:#0f0;
-display:flex;flex-direction:column;justify-content:center;
-align-items:center;text-align:center;z-index:9999`;
-end.innerHTML=`
-<p>NEURAL BREACH LOG</p><br>
-<p>Você não estava jogando.</p>
-<p>A IA estava aprendendo.</p><br>
-<p>Não existe saída.</p><br>
-<p>FINAL VERDADEIRO</p>`;
-document.body.appendChild(end);
-}
-
-/* ================= LOOP ================= */
-let mx=0,my=0;
-addEventListener("mousemove",e=>{
-mx=(e.clientX/innerWidth-.5)*10;
-my=(e.clientY/innerHeight-.5)*10;
-});
 
 function loop(){
-ctx.clearRect(0,0,canvas.width,canvas.height);
-for(let i=0;i<40;i++){
-ctx.fillStyle=`rgba(255,255,255,${Math.random()*0.02})`;
-ctx.fillRect(Math.random()*canvas.width,Math.random()*canvas.height,2,2);
+  if(!running) return;
+  update();
+  render();
+  requestAnimationFrame(loop);
 }
-bg.style.transform=`translate(${mx*.3}px,${my*.3}px)`;
-mid.style.transform=`translate(${mx*.6}px,${my*.6}px)`;
-front.style.transform=`translate(${mx}px,${my}px)`;
-requestAnimationFrame(loop);
+
+function update(){
+  GAME.time += 0.01;
+  GAME.power -= 0.005;
+
+  // IA animatrônico simples
+  if(Math.random() < 0.01){
+    GAME.animatronicX += 50;
+  }
+
+  if(GAME.animatronicX > canvas.width - 100){
+    GAME.gameOver = true;
+    running = false;
+    document.getElementById("menu").style.display = "flex";
+  }
+
+  // Fim da noite
+  if(GAME.time >= 6){
+    nextNight();
+  }
 }
-loop();
+
+function render(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // escritório
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // animatrônico
+  ctx.fillStyle = "red";
+  ctx.fillRect(GAME.animatronicX, canvas.height/2, 50, 100);
+
+  document.getElementById("hud").innerHTML =
+    `Noite: ${GAME.night}<br>` +
+    `Energia: ${Math.floor(GAME.power)}%<br>` +
+    `Hora: ${GAME.time.toFixed(2)} AM`;
+}
+
+function nextNight(){
+  GAME.time = 0;
+  GAME.animatronicX = 0;
+  GAME.night++;
+  SAVE.night = GAME.night;
+  localStorage.setItem("NB_SAVE", JSON.stringify(SAVE));
+
+  // 👉 CHAMA PARTE C
+  checkSecretEnding();
+}
+
+/* =====================================================
+   C — FINAL SECRETO + LORE
+===================================================== */
+
+function checkSecretEnding(){
+  if(GAME.night > 5 && !SAVE.secretEnding){
+    SAVE.secretEnding = true;
+    localStorage.setItem("NB_SAVE", JSON.stringify(SAVE));
+    triggerSecretEnding();
+  }
+}
+
+function triggerSecretEnding(){
+  running = false;
+  document.getElementById("final").style.display = "flex";
+}
+
+function resetGame(){
+  localStorage.clear();
+  location.reload();
+}
+
+/* =====================================================
+   SERVICE WORKER
+===================================================== */
+
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("sw.js");
+}
 </script>
+
 </body>
 </html>
