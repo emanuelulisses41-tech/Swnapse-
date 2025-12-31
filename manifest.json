@@ -1,15 +1,20 @@
 {
   "name": "Five Nights — Neural Breach",
   "short_name": "Neural Breach",
-  "description": "Survival horror inspirado em FNAF 1, 2 e 3 com IA adaptativa e final secreto.",
-  "start_url": "index.html",
+  "description": "Jogo de terror inspirado em FNAF com IA adaptativa e final secreto.",
+  "start_url": "./index.html",
   "display": "fullscreen",
+  "orientation": "portrait",
   "background_color": "#000000",
   "theme_color": "#000000",
-  "orientation": "landscape",
   "icons": [
     {
-      "src": "icon-512.png",
+      "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAFUlEQVR4Xu3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAA4C8GNgAAAfY2t7wAAAAASUVORK5CYII=",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAFUlEQVR4Xu3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAA4C8GNgAAAfY2t7wAAAAASUVORK5CYII=",
       "sizes": "512x512",
       "type": "image/png"
     }
