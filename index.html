@@ -2,224 +2,259 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="theme-color" content="#000000">
 <title>Five Nights — Neural Breach</title>
+
+<!-- ================= MANIFEST INLINE ================= -->
+<link rel="manifest" href='data:application/json,{
+"name":"Neural Breach",
+"short_name":"NeuralBreach",
+"start_url":".",
+"display":"standalone",
+"background_color":"#000000",
+"theme_color":"#000000",
+"icons":[{"src":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB","sizes":"192x192","type":"image/png"}]
+}'>
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:monospace}
 html,body{width:100%;height:100%;background:#000;color:#0f0;overflow:hidden}
-
-#game{position:relative;width:100vw;height:100vh;background:radial-gradient(#060606,#000)}
-.layer{position:absolute;width:110%;height:110%;top:-5%;left:-5%}
-#mid{background:rgba(255,255,255,.04)}
+#game{position:relative;width:100vw;height:100vh;background:radial-gradient(#050505,#000)}
+.layer{position:absolute;width:110%;height:110%;top:-5%;left:-5%;pointer-events:none}
+#bg{background:#020202}
+#mid{background:rgba(255,255,255,.03)}
 
 canvas{position:absolute;inset:0}
 
+/* HUD */
 #hud{
-  position:absolute;bottom:0;width:100%;height:60px;
-  display:none;justify-content:space-between;align-items:center;
-  padding:10px 20px;
-  background:linear-gradient(to top,#000,transparent);
-  z-index:10
+position:absolute;bottom:0;width:100%;height:90px;
+display:none;justify-content:space-between;align-items:center;
+padding:10px 20px;background:linear-gradient(to top,#000,transparent);
+z-index:10;font-size:13px
 }
 
-#menu,#custom{
-  position:absolute;inset:0;
-  background:#000;color:#aaa;
-  display:flex;flex-direction:column;
-  justify-content:center;align-items:center;
-  z-index:20
+/* MENU */
+#menu{
+position:absolute;inset:0;background:#000;color:#aaa;
+display:flex;flex-direction:column;justify-content:center;align-items:center;
+z-index:20;text-align:center
 }
+.btn{border:1px solid #333;padding:10px 40px;margin:8px;cursor:pointer}
 
-#custom{display:none}
-
-.btn{border:1px solid #333;padding:10px 40px;margin:10px;cursor:pointer}
-
-#cameraView{
-  position:absolute;inset:0;
-  background:#000;
-  display:none;
-  z-index:5
+/* CAMERA */
+#camera{
+position:absolute;inset:0;display:none;z-index:5;
+background:#000;padding:15px;color:#0f0
 }
+#camName{opacity:.9}
+#camNoise{opacity:.4;font-size:12px}
+#camLog{margin-top:8px;font-size:11px;opacity:.5}
 
-#map{
-  position:absolute;right:10px;top:10px;
-  border:1px solid #0f0;padding:8px;font-size:12px
-}
-
-.camBtn{border:1px solid #0f0;padding:4px;margin:4px;cursor:pointer}
-
-#flash{
-  position:absolute;inset:0;background:#fff;
-  opacity:0;pointer-events:none;z-index:99
-}
+/* FX */
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:99}
+#dark{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;z-index:98}
 </style>
 </head>
 
 <body>
 <div id="game">
-  <div class="layer"></div>
-  <div id="mid" class="layer"></div>
+<div id="bg" class="layer"></div>
+<div id="mid" class="layer"></div>
+<canvas id="screen"></canvas>
 
-  <canvas id="screen"></canvas>
+<div id="camera">
+<div id="camName"></div>
+<div id="camNoise"></div>
+<div id="camLog"></div>
+</div>
 
-  <div id="cameraView">
-    <div id="map">
-      <div class="camBtn" onclick="setCam(0)">CAM 1</div>
-      <div class="camBtn" onclick="setCam(1)">CAM 2</div>
-      <div class="camBtn" onclick="setCam(2)">CAM 3</div>
-      <div class="camBtn" onclick="setCam(3)">CAM 4</div>
-    </div>
-  </div>
+<div id="hud">
+<div id="time">12:00 AM</div>
+<div id="power">Power: 100%</div>
+<div id="stress">Stress: 0%</div>
+<div id="sanity">Sanity: OK</div>
+</div>
 
-  <div id="hud">
-    <div id="time">12:00 AM</div>
-    <div id="power">Power: 100%</div>
-  </div>
-
-  <div id="menu"></div>
-  <div id="custom"></div>
-  <div id="flash"></div>
+<div id="flash"></div>
+<div id="dark"></div>
+<div id="menu"></div>
 </div>
 
 <script>
-/* ================= LORE + SAVE ================= */
-const PROGRESS={nightUnlocked:1,deaths:0,trueEnding:false}
-const AI_MEMORY={camUse:0}
-const SECRET={flag:false}
-
-function save(){localStorage.setItem("NB",JSON.stringify({PROGRESS,AI_MEMORY,SECRET}))}
-function load(){
-  const s=localStorage.getItem("NB"); if(!s)return;
-  Object.assign(PROGRESS,JSON.parse(s).PROGRESS)
-  Object.assign(AI_MEMORY,JSON.parse(s).AI_MEMORY)
-  Object.assign(SECRET,JSON.parse(s).SECRET)
+/* ================= SERVICE WORKER INLINE ================= */
+if('serviceWorker'in navigator){
+const sw=`
+self.addEventListener('install',e=>self.skipWaiting());
+self.addEventListener('fetch',e=>{});
+`;
+const blob=new Blob([sw],{type:'text/javascript'});
+navigator.serviceWorker.register(URL.createObjectURL(blob));
 }
-load();
 
-/* ================= ENGINE ================= */
-const canvas=screen,ctx=canvas.getContext("2d");
+/* ================= LORE ================= */
+const LORE=[
+"Fazbear Neural Systems iniciou testes de memória sintética.",
+"Os animatrônicos aprendem observando.",
+"As câmeras não mostram tudo.",
+"O prédio reage ao medo.",
+"Neural Breach não foi um acidente."
+];
+
+/* ================= SAVE ================= */
+const SAVE_KEY="NB_ULTIMATE_SAVE";
+let SAVE=JSON.parse(localStorage.getItem(SAVE_KEY))||{
+unlocked:1,trueEnding:false,badEnding:false,lore:[]
+};
+
+/* ================= MEMORY ================= */
+const MEMORY={
+cameraUses:0,
+stress:0,
+sanity:100,
+idle:0,
+threat:0
+};
+
+/* ================= GAME ================= */
+const GAME={
+night:1,hour:0,power:100,running:false,camera:false
+};
+
+/* ================= MENU ================= */
+const menu=document.getElementById("menu");
+function renderMenu(){
+menu.innerHTML=`
+<h1>NEURAL BREACH</h1>
+<div class="btn" onclick="startNight(1)">NOVO JOGO</div>
+<div class="btn" onclick="startNight(SAVE.unlocked)">CONTINUAR</div>
+<div class="btn" onclick="startNight(8)">CUSTOM NIGHT</div>
+${SAVE.trueEnding?"<p>FINAL VERDADEIRO</p>":""}
+${SAVE.badEnding?"<p>FINAL RUIM</p>":""}
+`;
+}
+renderMenu();
+
+/* ================= START / END ================= */
+function startNight(n){
+GAME.night=n;
+GAME.hour=0;
+GAME.power=100;
+MEMORY.stress=0;
+MEMORY.sanity=100;
+MEMORY.threat=0;
+GAME.running=true;
+animatronics.forEach(a=>a.pos=0);
+menu.style.display="none";
+hud.style.display="flex";
+}
+
+function endNight(){
+GAME.running=false;
+if(GAME.night>=SAVE.unlocked)SAVE.unlocked=Math.min(8,GAME.night+1);
+if(GAME.night===8 && MEMORY.sanity>60 && MEMORY.stress<60)SAVE.trueEnding=true;
+if(GAME.night===8 && MEMORY.sanity<=60)SAVE.badEnding=true;
+localStorage.setItem(SAVE_KEY,JSON.stringify(SAVE));
+hud.style.display="none";
+menu.style.display="flex";
+renderMenu();
+}
+
+/* ================= TIME ================= */
+setInterval(()=>{
+if(!GAME.running)return;
+GAME.hour++;
+time.innerText=(GAME.hour===0?"12":GAME.hour)+":00 AM";
+if(GAME.hour>=6)endNight();
+},45000);
+
+/* ================= POWER / SANITY ================= */
+setInterval(()=>{
+if(!GAME.running)return;
+GAME.power-=0.3+GAME.night*0.15;
+MEMORY.stress+=0.6;
+MEMORY.sanity-=MEMORY.stress*0.015;
+MEMORY.threat+=0.4;
+power.innerText="Power: "+Math.floor(GAME.power)+"%";
+stress.innerText="Stress: "+Math.floor(MEMORY.stress)+"%";
+sanity.innerText="Sanity: "+(MEMORY.sanity>60?"OK":MEMORY.sanity>30?"UNSTABLE":"CRITICAL");
+if(GAME.power<=0)blackout();
+},1000);
+
+function blackout(){
+GAME.running=false;
+dark.style.opacity=1;
+setTimeout(()=>{
+alert("ENERGIA ESGOTADA");
+dark.style.opacity=0;
+menu.style.display="flex";
+renderMenu();
+},600);
+}
+
+/* ================= CAMERAS ================= */
+const CAMS=["Stage","Hall","Left","Right","Back","Office"];
+let camIndex=0;
+const camLogArr=[];
+addEventListener("keydown",e=>{
+if(e.key==="c"&&GAME.running){
+GAME.camera=!GAME.camera;
+camera.style.display=GAME.camera?"block":"none";
+MEMORY.cameraUses++;
+}
+if(GAME.camera){
+if(e.key==="ArrowRight")camIndex=(camIndex+1)%CAMS.length;
+if(e.key==="ArrowLeft")camIndex=(camIndex-1+CAMS.length)%CAMS.length;
+camName.innerText="CAM "+CAMS[camIndex];
+camNoise.innerText="Interferência "+Math.floor(MEMORY.stress)+"%";
+camLogArr.push(CAMS[camIndex]);
+camLog.innerText="LOG "+camLogArr.slice(-6).join(">");
+}
+});
+
+/* ================= ANIMATRONICS ================= */
+const animatronics=[
+{name:"Freddy",pos:0,ag:1},
+{name:"Bonnie",pos:0,ag:1.2},
+{name:"Chica",pos:0,ag:1.1},
+{name:"Springtrap",pos:0,ag:1.6}
+];
+
+setInterval(()=>{
+if(!GAME.running)return;
+animatronics.forEach(a=>{
+let aggression=a.ag+GAME.night*0.6+(MEMORY.threat*0.01);
+if(Math.random()*aggression>1)a.pos++;
+if(Math.random()<0.1 && MEMORY.sanity<40)a.pos--;
+if(a.pos>=6)attack(a.name);
+});
+},3000);
+
+function attack(n){
+GAME.running=false;
+flash.style.opacity=1;
+setTimeout(()=>{
+flash.style.opacity=0;
+alert("VOCÊ FOI PEGO POR "+n);
+menu.style.display="flex";
+renderMenu();
+},150);
+}
+
+/* ================= VISUAL / NOISE ================= */
+const canvas=document.getElementById("screen");
+const ctx=canvas.getContext("2d");
 function resize(){canvas.width=innerWidth;canvas.height=innerHeight}
 addEventListener("resize",resize);resize();
 
-const GAME={night:1,hour:0,power:100,run:false,cam:false,camID:0}
-
-const menu=document.getElementById("menu");
-const custom=document.getElementById("custom");
-
-menu.innerHTML=`
-<h1>NEURAL BREACH</h1>
-<div class="btn" onclick="start(1)">NOVO JOGO</div>
-<div class="btn" onclick="start(PROGRESS.nightUnlocked)">CONTINUAR</div>
-<div class="btn" onclick="openCustom()">CUSTOM NIGHT</div>
-`;
-
-function openCustom(){
-  custom.style.display="flex";
-  custom.innerHTML=`
-  <h2>CUSTOM NIGHT</h2>
-  <div class="btn" onclick="start(8)">NIGHT 8</div>
-  <div class="btn" onclick="back()">VOLTAR</div>`;
-}
-function back(){custom.style.display="none";menu.style.display="flex"}
-
-function start(n){
-  GAME.night=n;GAME.hour=0;GAME.power=100;GAME.run=true;
-  anim.forEach(a=>a.p=0);
-  menu.style.display="none";custom.style.display="none";
-  hud.style.display="flex";
-}
-
-/* ================= TEMPO / ENERGIA ================= */
-setInterval(()=>{
-  if(!GAME.run)return;
-  GAME.hour++;
-  time.innerText=(GAME.hour===0?"12":GAME.hour)+":00 AM";
-  if(GAME.hour>=6) win();
-},45000);
-
-setInterval(()=>{
-  if(!GAME.run)return;
-  GAME.power-=0.15+GAME.night*0.1;
-  power.innerText="Power: "+Math.floor(GAME.power)+"%";
-  if(GAME.power<=0) lose("ENERGIA ACABOU");
-},1000);
-
-/* ================= IA ================= */
-const anim=[
-  {n:"Freddy",p:0},
-  {n:"Bonnie",p:0},
-  {n:"Chica",p:0},
-  {n:"Spring",p:0}
-];
-
-function ai(){
-  let ag=0.25+(GAME.night*0.08);
-  if(AI_MEMORY.camUse>12) ag+=0.15;
-  return Math.random()<ag;
-}
-
-setInterval(()=>{
-  if(!GAME.run)return;
-  anim.forEach(a=>{
-    if(ai())a.p++;
-    if(a.p>=4) lose(a.n);
-  });
-  if(Math.random()<0.08) glitch();
-},3000);
-
-/* ================= CÂMERAS ================= */
-addEventListener("keydown",e=>{
-  if(e.key==="c"&&GAME.run){
-    GAME.cam=!GAME.cam;
-    cameraView.style.display=GAME.cam?"block":"none";
-    GAME.power--; AI_MEMORY.camUse++;
-  }
-});
-function setCam(i){
-  GAME.camID=i;
-  if(Math.random()<0.2) flashFX();
-}
-
-/* ================= FINAIS ================= */
-function win(){
-  GAME.run=false;
-  if(GAME.night>=PROGRESS.nightUnlocked)
-    PROGRESS.nightUnlocked=Math.min(8,GAME.night+1);
-  if(GAME.night===8 && PROGRESS.deaths===0){
-    SECRET.flag=true; PROGRESS.trueEnding=true;
-    alert("FINAL SECRETO DESBLOQUEADO");
-  }
-  save(); reset();
-}
-function lose(who){
-  GAME.run=false; PROGRESS.deaths++;
-  flashFX(); alert("VOCÊ FOI PEGO POR "+who);
-  save(); reset();
-}
-function reset(){
-  hud.style.display="none";
-  menu.style.display="flex";
-}
-
-/* ================= FX ================= */
-function flashFX(){
-  flash.style.opacity=1;
-  setTimeout(()=>flash.style.opacity=0,120);
-}
-function glitch(){
-  ctx.fillStyle="rgba(255,255,255,.2)";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-}
-
-/* ================= LOOP ================= */
 function loop(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  for(let i=0;i<35;i++){
-    ctx.fillStyle=`rgba(255,255,255,${Math.random()*0.03})`;
-    ctx.fillRect(Math.random()*canvas.width,Math.random()*canvas.height,2,2);
-  }
-  requestAnimationFrame(loop);
+ctx.clearRect(0,0,canvas.width,canvas.height);
+for(let i=0;i<80;i++){
+ctx.fillStyle=`rgba(255,255,255,${Math.random()*0.035})`;
+ctx.fillRect(Math.random()*canvas.width,Math.random()*canvas.height,2,2);
+}
+requestAnimationFrame(loop);
 }
 loop();
 </script>
